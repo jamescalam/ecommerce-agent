@@ -1,0 +1,56 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+  resource:
+    attributes:
+    - key: key.test
+      value: "via-collector"
+      action: insert
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+      [
+          {
+            name: high-latency,
+            type: latency,
+            latency: {threshold_ms: 500}
+          },
+          {
+            name: http_error_only,
+            type: numeric_attribute,
+            numeric_attribute: {key: http.status_code, min_value: 500, max_value: 599}
+          }
+      ]
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    send_timestamps: true
+    namespace: otel
+    const_labels:
+      via: collector
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [tail_sampling, batch, resource]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
