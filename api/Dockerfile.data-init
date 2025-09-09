@@ -1,0 +1,39 @@
+# Data preparation container for ecommerce agent
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY pyproject.toml .
+# and readme for package install
+COPY README.md .
+RUN pip install --no-cache-dir -e .
+
+# Copy data preparation script
+COPY data_prep.py .
+
+# Create data directory
+COPY /data /app/data
+
+# Set environment variables
+ENV DATA_DIR=/app/data
+ENV PYTHONPATH=/app
+
+# Set proper permissions
+RUN chmod +x data_prep.py
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+USER app
+
+# Run data preparation
+CMD ["python", "data_prep.py"]

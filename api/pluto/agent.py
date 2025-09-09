@@ -1,5 +1,12 @@
 from graphai import Graph, node, router
 from graphai.callback import EventCallback
+from pluto.tools import (
+    predict_customer_purchase,
+    predict_product_demand,
+    predict_any,
+    query_dataframes,
+    get_tool_schemas
+)
 
 
 # define simple nodes
@@ -11,11 +18,15 @@ async def start(input: dict) -> dict:
 async def llm(input: dict, state: dict, callback: EventCallback) -> dict:
     # get client initialized in lifespan
     client = state["client"]
+    # get tool schemas
+    tools = get_tool_schemas()
     # call openai (or another provider as preferred)
     stream = await client.chat.completions.create(
         model="gpt-4.1-mini",
         messages=state["events"],
+        tools=[x.to_openai(api="completions") for x in tools],
         stream=True,
+        seed=9000,  # keep consistent results
     )
     direct_answer: str = ""
     tool_call: dict = {}
@@ -25,8 +36,7 @@ async def llm(input: dict, state: dict, callback: EventCallback) -> dict:
             # this handles direct text output
             direct_answer += token
             await callback.acall(token)
-        # no tools are setup in this template, but we add handling for
-        # them nonetheless
+        # handle tool calls
         tool_calls_out = chunk.choices[0].delta.tool_calls
         if tool_calls_out and (tool_name := tool_calls_out[0].function.name) is not None:
             # this handles the initial tokens of a tool call
@@ -76,33 +86,58 @@ def get_graph() -> Graph:
     dev_message = {
         "role": "developer",
         "content": (
-            "You are a helpful assistant that uses the various tools and to "
-            "answer the user's questions."
+            "You are a helpful assistant that uses the various tools and "
+            "KumoRFM integration to answer the user's analytics questions "
+            "about our H&M ecommerce dataset."
             "\n"
             "When answering questions, you may use the various tools "
             "multiple times before answering to the user. You should aim "
-            "aim to have all of the information you need from the tools "
+            "to have all of the information you need from the tools "
             "before answering the user."
             "\n"
-            "There is a limit of 10 steps to each interaction, measured "
+            "There is a limit of 30 steps to each interaction, measured "
             "as the number of tool calls made between the user's most "
             "recent message and your response to the user. Keep that limit "
             "in mind but ensure you are still thorough in your analysis."
         )
     }
-    # create simple graph
+    
+    # Initialize KumoRFM service
+    from pluto.kumo_integration import kumo_service
+    kumo_service.initialize()
+    
+    # create graph with ecommerce tools
     graph = (
-        Graph(max_steps=10)
-        .set_state({"events": [dev_message]})
+        Graph(max_steps=30)
+        .set_state({
+            "events": [dev_message],
+            "kumorfm": kumo_service.model,
+            "transactions_df": kumo_service.transactions_df,
+            "articles_df": kumo_service.articles_df,
+            "customers_df": kumo_service.customers_df
+        })
         .add_node(start)
         .add_node(llm)
-        .add_node(end)
+        .add_node(predict_customer_purchase)
+        .add_node(predict_product_demand)
+        .add_node(predict_any)
+        .add_node(query_dataframes)
         .add_router(
             sources=[start],
             router=llm,
-            destinations=[end],
+            destinations=[
+                predict_customer_purchase,
+                predict_product_demand,
+                predict_any,
+                query_dataframes,
+                end
+            ]
         )
-        .add_edge(start, llm)
+        .add_edge(predict_customer_purchase, llm)
+        .add_edge(predict_product_demand, llm)
+        .add_edge(predict_any, llm)
+        .add_edge(query_dataframes, llm)
+        .add_node(end)
         .add_edge(llm, end)
         .compile()
     )

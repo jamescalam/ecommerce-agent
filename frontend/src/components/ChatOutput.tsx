@@ -29,7 +29,7 @@ function ThinkingIndicator({ hasResponse, isComplete }: { hasResponse: boolean, 
   }, [hasResponse, thinkingChars.length])
   
   if (hasResponse || isComplete) {
-    return <span className="text-white font-bold text-sm">></span>
+    return <span className="text-white font-bold text-sm"></span>
   }
   
   return <span className="text-white font-bold text-sm">{thinkingChars[charIndex]}</span>
