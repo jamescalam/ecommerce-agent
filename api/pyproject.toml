@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12.7"
 dependencies = [
     "fastapi>=0.116.1",
-    "graphai-lib==0.0.10rc2",
+    "graphai-lib==0.0.10rc3",
     "openai>=1.106.1",
     "opentelemetry-api>=1.36.0",
     "opentelemetry-instrumentation-fastapi>=0.57b0",
@@ -23,6 +23,7 @@ dependencies = [
     "kumoai==2.7.0",
     "pandas>=2.0.0",
     "kaggle>=1.7.4.5",
+    "tabulate>=0.9.0",
 ]
 
 [build-system]

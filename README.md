@@ -28,37 +28,29 @@ An intelligent ecommerce analytics agent powered by KumoRFM and GraphAI, using t
 
 ### Prerequisites
 - Docker & Docker Compose
-- Kaggle account with API credentials
 - OpenAI API key
 - KumoRFM API key
 
 ### Setup
 
-1. **Get Kaggle credentials** from [kaggle.com/settings](https://kaggle.com/settings)
-   ```bash
-   mkdir -p ~/.kaggle
-   cp path/to/kaggle.json ~/.kaggle/
-   chmod 600 ~/.kaggle/kaggle.json
-   ```
-
-2. **Accept competition terms** at [H&M Competition Page](https://www.kaggle.com/competitions/h-and-m-personalized-fashion-recommendations)
-
-3. **Set environment variables**
+1. **Set environment variables**
    ```bash
    cp env.example .env
-   # Edit .env with your API keys
+   # Edit .env with your API keys:
+   # OPENAI_API_KEY=your_openai_key
+   # KUMO_API_KEY=your_kumo_key
    ```
 
-4. **Start the system**
+2. **Start the system**
    ```bash
    docker-compose up
    ```
 
-The system will automatically:
-- Download the H&M dataset (~7GB) 
-- Prepare data for KumoRFM
-- Initialize the agent
-- Start the API server on port 8000
+That's it! The system includes:
+- ✅ Pre-curated H&M sample dataset (1,100 customers, 49K+ articles, 154K+ transactions)
+- ✅ Fast startup (~30-60 seconds)
+- ✅ All ecommerce analytics capabilities
+- ✅ Representative data for demos and development
 
 ### Usage
 
@@ -72,8 +64,8 @@ curl -X POST http://localhost:8000/chat \
 
 ## Documentation
 
-- 📋 **[Data Setup Guide](DATA_SETUP.md)** - Detailed setup instructions
 - 🛠️ **[Agent Setup Guide](ECOMMERCE_AGENT_SETUP.md)** - Agent architecture details
+- 📊 **[Sample Data Guide](SAMPLE_DATA_GUIDE.md)** - Understanding the curated dataset
 
 ## Example Queries
 
@@ -85,10 +77,9 @@ curl -X POST http://localhost:8000/chat \
 
 ## Architecture
 
-- **Init Container**: Downloads and prepares H&M dataset
+- **Sample Dataset**: Pre-curated H&M data included in repository
 - **API Service**: KumoRFM-powered GraphAI agent
 - **Frontend**: React-based chat interface  
-- **Persistent Storage**: Docker volumes for data persistence
 - **Monitoring**: Jaeger tracing + Prometheus metrics
 
 ## Development
@@ -104,9 +95,32 @@ python test_integration.py
 python example_usage.py
 ```
 
+## Sample Dataset
+
+The repository includes a carefully curated sample of the H&M Personalized Fashion Recommendations dataset:
+
+- **1,100 customers** (1,000 active + 100 inactive for churn prediction)
+- **49,854 articles** (products with full metadata)
+- **154,440 transactions** (complete purchase history)
+
+This sample preserves all data relationships while being fast enough for development and demos. The selection includes:
+- High-value customers (top spenders)
+- Frequent shoppers (most active)
+- Recently active customers
+- Long-term customers (brand loyalty)
+- Diverse product catalog
+
 ## Troubleshooting
 
-See [DATA_SETUP.md](DATA_SETUP.md) for common issues and solutions.
+For common issues, check the logs:
+```bash
+docker-compose logs api
+```
+
+Common solutions:
+- Ensure KUMO_API_KEY and OPENAI_API_KEY are set
+- Check that port 8000 is available
+- Restart containers if needed: `docker-compose restart`
 
 ---
 

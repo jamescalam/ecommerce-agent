@@ -1,37 +1,17 @@
 services:
-  data-init:
-    build:
-      context: ./api
-      dockerfile: Dockerfile.data-init
-    platform: linux/amd64  # for macOS+docker+kumo support
-    volumes:
-      - ecommerce_data:/app/data
-      - ~/.kaggle:/home/app/.kaggle:ro  # Mount Kaggle credentials
-    environment:
-      - DATA_DIR=/app/data
-      - KAGGLE_USERNAME=${KAGGLE_USERNAME:-}
-      - KAGGLE_KEY=${KAGGLE_KEY:-}
-    networks:
-      - agentdemo
-    restart: "no"  # Only run once
-
   api:
     build:
       context: ./api
       dockerfile: Dockerfile.api
     platform: linux/amd64  # for macOS+docker+kumo support
     volumes:
-      - ./api:/app/api:Z
-      - ecommerce_data:/app/data:ro  # Mount data volume as read-only
+      - ./api:/app:Z
     ports:
       - "8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - KUMO_API_KEY=${KUMO_API_KEY}
       - DATA_DIR=/app/data
-    depends_on:
-      data-init:
-        condition: service_completed_successfully
     networks:
       - agentdemo
 
@@ -78,10 +58,6 @@ services:
       - "8889:8889"
     networks:
       - agentdemo
-
-volumes:
-  ecommerce_data:
-    driver: local
 
 networks:
   agentdemo:

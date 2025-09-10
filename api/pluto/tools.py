@@ -1,8 +1,10 @@
 import json
+
 import pandas as pd
-from pydantic import BaseModel, Field
 from graphai import node
+from graphai.callback import EventCallback
 from graphai.utils import FunctionSchema
+from pydantic import BaseModel, Field
 
 
 class PredictCustomerPurchase(BaseModel):
@@ -15,6 +17,8 @@ class PredictCustomerPurchase(BaseModel):
     ```
 
     Where days is the number of days to predict and customer_ids is a list of customer IDs.
+    As such, you MUST provide both the number of days to predict for AND an array of
+    customer IDs - do NOT forget to include `customer_ids`.
 
     The format returned is a list of dictionaries, with a 1-to-1 mapping to the number
     of customers in the input like so:
@@ -60,12 +64,14 @@ class QueryDataframes(BaseModel):
     assign the results you need to the `out` variable, otherwise nothing will be returned
     as this will be run with `exec()`. After execution we access the `out` variable and
     return it to you.
+
+    If outputting a dataframe, you must use the .to_markdown() method to output an easily
+    readable markdown table.
     """
     query: str = Field(..., description="The python code to execute")
 
-
-@node
-async def predict_customer_purchase(input: dict, state: dict) -> dict:
+@node(stream=True)
+async def predict_customer_purchase(input: dict, state: dict, callback: EventCallback) -> dict:
     try:
         tool_call_args = json.loads(state["events"][-1]["tool_calls"][0]["function"]["arguments"])
         days = tool_call_args.get("days")
@@ -91,7 +97,16 @@ async def predict_customer_purchase(input: dict, state: dict) -> dict:
         content = [{"type": "text", "text": json.dumps(out)}]
     except Exception as e:
         content = [{"type": "text", "text": str(e)}]
-    
+    # stream tool output
+    await callback.acall(
+        type="tool_output",
+        params={
+            "id": state["events"][-1]["tool_calls"][0]["id"],
+            "name": "predict_customer_purchase",
+            "arguments": tool_call_args,
+            "output": content[0]["text"]
+        }
+    )
     # Add tool call event to state
     event = {
         "role": "tool",
@@ -102,8 +117,8 @@ async def predict_customer_purchase(input: dict, state: dict) -> dict:
     return {"input": {}}
 
 
-@node
-async def predict_product_demand(input: dict, state: dict) -> dict:
+@node(stream=True)
+async def predict_product_demand(input: dict, state: dict, callback: EventCallback) -> dict:
     try:
         tool_call_args = json.loads(state["events"][-1]["tool_calls"][0]["function"]["arguments"])
         days = tool_call_args.get("days")
@@ -116,14 +131,23 @@ async def predict_product_demand(input: dict, state: dict) -> dict:
             ids_string = ", ".join([f"'{id}'" for id in article_ids])
             pql = f"PREDICT SUM(transactions.price, 0, {days}, days) FOR articles.article_id IN ({ids_string})"
         else:
-            pql = f"PREDICT SUM(transactions.price, 0, {days}, days) FOR articles.article_id='{article_ids[0]}'"
+            pql = f"PREDICT SUM(transactions.price, 0, {days}, days) FOR articles.article_id={article_ids[0]}"
         
         df = state["kumorfm"].predict(pql)
         out = df.to_dict(orient="records")
         content = [{"type": "text", "text": json.dumps(out)}]
     except Exception as e:
         content = [{"type": "text", "text": str(e)}]
-    
+    # stream tool output
+    await callback.acall(
+        type="tool_output",
+        params={
+            "id": state["events"][-1]["tool_calls"][0]["id"],
+            "name": "predict_customer_purchase",
+            "arguments": tool_call_args,
+            "output": content[0]["text"]
+        }
+    )
     event = {
         "role": "tool",
         "content": content,
@@ -133,8 +157,8 @@ async def predict_product_demand(input: dict, state: dict) -> dict:
     return {"input": {}}
 
 
-@node
-async def predict_any(input: dict, state: dict) -> dict:
+@node(stream=True)
+async def predict_any(input: dict, state: dict, callback: EventCallback) -> dict:
     try:
         tool_call_args = json.loads(state["events"][-1]["tool_calls"][0]["function"]["arguments"])
         query = tool_call_args.get("query")
@@ -146,7 +170,16 @@ async def predict_any(input: dict, state: dict) -> dict:
         content = [{"type": "text", "text": json.dumps(out)}]
     except Exception as e:
         content = [{"type": "text", "text": str(e)}]
-    
+    # stream tool output
+    await callback.acall(
+        type="tool_output",
+        params={
+            "id": state["events"][-1]["tool_calls"][0]["id"],
+            "name": "predict_customer_purchase",
+            "arguments": tool_call_args,
+            "output": content[0]["text"]
+        }
+    )
     event = {
         "role": "tool",
         "content": content,
@@ -156,11 +189,10 @@ async def predict_any(input: dict, state: dict) -> dict:
     return {"input": {}}
 
 
-@node
-async def query_dataframes(input: dict, state: dict) -> dict:
+@node(stream=True)
+async def query_dataframes(input: dict, state: dict, callback: EventCallback) -> dict:
     try:
         tool_call_args = json.loads(state["events"][-1]["tool_calls"][0]["function"]["arguments"])
-        
         # Get the dataframes from state
         namespace = {
             "transactions_df": state["transactions_df"],
@@ -195,7 +227,16 @@ async def query_dataframes(input: dict, state: dict) -> dict:
                 "Please fix your query and trying again."
             )
         }]
-    
+    # stream tool output
+    await callback.acall(
+        type="tool_output",
+        params={
+            "id": state["events"][-1]["tool_calls"][0]["id"],
+            "name": "predict_customer_purchase",
+            "arguments": tool_call_args,
+            "output": content[0]["text"]
+        }
+    )
     # Add tool call event to state
     event = {
         "role": "tool",
@@ -221,3 +262,4 @@ def get_tool_schemas():
     query_df_schema.name = "query_dataframes"
     
     return [churn_schema, demand_schema, any_schema, query_df_schema]
+

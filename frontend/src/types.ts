@@ -4,16 +4,21 @@ export interface Message {
 }
 
 export interface ToolCall {
+  id: string
   name: string
   status: 'pending' | 'running' | 'completed'
-  timestamp: number
+  arguments?: string
+  output?: string
 }
+
+export type ContentItem = 
+  | { type: 'text'; content: string }
+  | { type: 'tool'; toolCall: ToolCall }
 
 export interface ChatOutput {
   id: string
   question: string
-  response: string
   isComplete: boolean
-  toolCalls: ToolCall[]
+  content: ContentItem[]
   isUserOnly?: boolean
 }
