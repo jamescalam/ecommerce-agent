@@ -42,9 +42,8 @@ export default function Home() {
     const userOutputs = messages.map((message) => ({
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       question: message.content,
-      response: '',
       isComplete: true,
-      toolCalls: [],
+      content: [],
       isUserOnly: true
     }))
 
@@ -53,9 +52,8 @@ export default function Home() {
     const responseOutput = {
       id: responseOutputId,
       question: '',
-      response: '',
       isComplete: false,
-      toolCalls: [],
+      content: [],
       isUserOnly: false
     }
 
@@ -82,8 +80,9 @@ export default function Home() {
       }
 
       const decoder = new TextDecoder()
-      let currentMessageIndex = 0
-      let accumulatedResponse = ''
+      let currentTextBuffer = ''
+      let isStreamingTool = false
+      let hasStartedTextStreaming = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -97,78 +96,175 @@ export default function Home() {
             const data = line.slice(6).trim()
             if (data && data !== '[DONE]') {
               try {
-                // Parse JSON data from GraphAI events
                 const parsed = JSON.parse(data)
+                const outputId = outputIds[0] // Single response output
                 
-                // Handle message index changes
-                if (parsed.message_index !== undefined) {
-                  // Complete previous message if switching
-                  if (parsed.message_index !== currentMessageIndex && currentMessageIndex < outputIds.length) {
-                    setOutputs(prev => prev.map(output => 
-                      output.id === outputIds[currentMessageIndex] 
-                        ? { ...output, isComplete: true }
-                        : output
-                    ))
-                    accumulatedResponse = ''
-                  }
-                  currentMessageIndex = parsed.message_index
-                }
-                
-                // Only show tokens from callback events (user-facing content)
-                if (parsed.type === 'callback' && parsed.token && currentMessageIndex < outputIds.length) {
-                  accumulatedResponse += parsed.token
-                  
-                  // Update the current message output
-                  setOutputs(prev => prev.map(output => 
-                    output.id === outputIds[currentMessageIndex] 
-                      ? { ...output, response: accumulatedResponse }
-                      : output
-                  ))
-                }
-                // Handle tool calls separately (show as status indicators)
-                else if (parsed.params?.tool_name && currentMessageIndex < outputIds.length) {
-                  const toolName = parsed.params.tool_name
-                  
-                  setOutputs(prev => prev.map(output => 
-                    output.id === outputIds[currentMessageIndex] 
-                      ? { 
-                          ...output, 
-                          toolCalls: [
-                            ...output.toolCalls.filter(tc => tc.name !== toolName),
-                            {
-                              name: toolName,
-                              status: 'running',
-                              timestamp: Date.now()
-                            }
-                          ]
+                // Handle tool_call events - create new tool (but ignore if text already started)
+                if (parsed.type === 'tool_call' && parsed.params && !hasStartedTextStreaming) {
+                  // Flush any pending text before tool (but keep it in buffer)
+                  if (currentTextBuffer) {
+                    setOutputs(prev => prev.map(output => {
+                      if (output.id === outputId) {
+                        const lastTextIndex = output.content.findLastIndex(item => item.type === 'text')
+                        if (lastTextIndex >= 0) {
+                          const updatedContent = [...output.content]
+                          updatedContent[lastTextIndex] = { type: 'text', content: currentTextBuffer }
+                          return { ...output, content: updatedContent }
+                        } else {
+                          return { ...output, content: [...output.content, { type: 'text', content: currentTextBuffer }] }
                         }
-                      : output
-                  ))
-                }
-              } catch {
-                // Handle plain text fallback (direct tokens)
-                if (currentMessageIndex < outputIds.length) {
-                  accumulatedResponse += data
+                      }
+                      return output
+                    }))
+                    // Don't clear the buffer - we've already saved the text
+                  }
                   
-                  // Update the current message output
+                  isStreamingTool = true
+                  // Reset buffer for any text that comes after the tool
+                  currentTextBuffer = ''
+                  const newToolCall = {
+                    id: parsed.params.id,
+                    name: parsed.params.name,
+                    status: 'running' as const,
+                    arguments: ''
+                  }
+                  
                   setOutputs(prev => prev.map(output => 
-                    output.id === outputIds[currentMessageIndex] 
-                      ? { ...output, response: accumulatedResponse }
+                    output.id === outputId 
+                      ? { ...output, content: [...output.content, { type: 'tool', toolCall: newToolCall }] }
                       : output
                   ))
                 }
+                
+                // Handle tool_args events - append arguments (ignore if text already started)
+                else if (parsed.type === 'tool_args' && parsed.params && !hasStartedTextStreaming) {
+                  const toolId = parsed.params.id // Assuming you'll add this
+                  const args = parsed.params.arguments || ''
+                  
+                  setOutputs(prev => prev.map(output => {
+                    if (output.id === outputId) {
+                      return {
+                        ...output,
+                        content: output.content.map(item => 
+                          item.type === 'tool' && item.toolCall.id === toolId
+                            ? { ...item, toolCall: { ...item.toolCall, arguments: (item.toolCall.arguments || '') + args } }
+                            : item
+                        )
+                      }
+                    }
+                    return output
+                  }))
+                }
+                
+                // Handle tool_output events - complete tool with output (ignore if text already started)
+                else if (parsed.type === 'tool_output' && parsed.params && !hasStartedTextStreaming) {
+                  isStreamingTool = false
+                  
+                  setOutputs(prev => prev.map(output => {
+                    if (output.id === outputId) {
+                      return {
+                        ...output,
+                        content: output.content.map(item => 
+                          item.type === 'tool' && item.toolCall.id === parsed.params.id
+                            ? { 
+                                ...item, 
+                                toolCall: { 
+                                  ...item.toolCall, 
+                                  output: parsed.params.output, 
+                                  status: 'completed' as const 
+                                } 
+                              }
+                            : item
+                        )
+                      }
+                    }
+                    return output
+                  }))
+                }
+                
+                // Handle text streaming via callback events
+                else if (parsed.type === 'callback' && typeof parsed.token === 'string') {
+                  currentTextBuffer += parsed.token
+                  hasStartedTextStreaming = true // Mark that text streaming has begun
+                  
+                  // Always update the UI with text, even during tool streaming
+                  setOutputs(prev => prev.map(output => {
+                    if (output.id === outputId) {
+                      // Check if we need to create a new text item or update existing
+                      const contents = [...output.content]
+                      const lastIndex = contents.length - 1
+                      const lastItem = contents[lastIndex]
+                      
+                      // If the last item is a text item and we're not in tool streaming, update it
+                      // If we're in tool streaming or last item is not text, create new text item
+                      if (!isStreamingTool && lastItem?.type === 'text') {
+                        contents[lastIndex] = { type: 'text', content: currentTextBuffer }
+                      } else if (isStreamingTool || lastItem?.type !== 'text') {
+                        // Add new text content after the tool
+                        contents.push({ type: 'text', content: currentTextBuffer })
+                        isStreamingTool = false // Reset flag since we're now streaming text
+                      }
+                      
+                      return { ...output, content: contents }
+                    }
+                    return output
+                  }))
+                }
+                
+                // Handle end_node events to reset state
+                else if (parsed.type === 'end_node') {
+                  if (parsed.token === 'llm') {
+                    // Reset text streaming flag when LLM node ends
+                    hasStartedTextStreaming = false
+                  } else {
+                    // Reset tool streaming for tool nodes
+                    isStreamingTool = false
+                  }
+                }
+                
+                // Handle start_node events to reset state
+                else if (parsed.type === 'start_node' && parsed.token === 'llm') {
+                  // Reset flags when a new LLM node starts
+                  hasStartedTextStreaming = false
+                  isStreamingTool = false
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e)
               }
             }
           }
         }
       }
 
-      // Mark all messages as complete
-      setOutputs(prev => prev.map(output => 
-        outputIds.includes(output.id) 
-          ? { ...output, isComplete: true }
-          : output
-      ))
+      // Flush any remaining text buffer and mark complete
+      const outputId = outputIds[0]
+      if (currentTextBuffer) {
+        setOutputs(prev => prev.map(output => {
+          if (output.id === outputId) {
+            const lastTextIndex = output.content.findLastIndex(item => item.type === 'text')
+            
+            if (lastTextIndex >= 0) {
+              const updatedContent = [...output.content]
+              updatedContent[lastTextIndex] = { type: 'text', content: currentTextBuffer }
+              return { ...output, content: updatedContent, isComplete: true }
+            } else {
+              return { 
+                ...output, 
+                content: [...output.content, { type: 'text', content: currentTextBuffer }],
+                isComplete: true
+              }
+            }
+          }
+          return output
+        }))
+      } else {
+        // Just mark as complete
+        setOutputs(prev => prev.map(output => 
+          output.id === outputId 
+            ? { ...output, isComplete: true }
+            : output
+        ))
+      }
 
     } catch (error) {
       console.error('Error sending message:', error)
@@ -178,7 +274,7 @@ export default function Home() {
         outputIds.includes(output.id) 
           ? { 
               ...output, 
-              response: 'Sorry, there was an error processing your request. Please try again.',
+              content: [...output.content, { type: 'text', content: 'Sorry, there was an error processing your request. Please try again.' }],
               isComplete: true 
             }
           : output

@@ -45,6 +45,7 @@ RUN uv sync --frozen --no-dev
 # Copy the package source code
 COPY pluto ./pluto
 COPY main.py ./
+COPY data ./data
 
 # Install the package itself
 RUN uv sync --frozen --no-dev
