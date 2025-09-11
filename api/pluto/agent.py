@@ -1,11 +1,10 @@
 from graphai import Graph, node, router
 from graphai.callback import EventCallback
 
+from pluto.prompts import pql_reference
 from pluto.tools import (
     get_tool_schemas,
-    predict_any,
-    predict_customer_purchase,
-    predict_product_demand,
+    kumorfm,
     query_dataframes,
 )
 
@@ -109,35 +108,14 @@ def get_graph() -> Graph:
             "There is a limit of 30 steps to each interaction, measured "
             "as the number of tool calls made between the user's most "
             "recent message and your response to the user. Keep that limit "
-            "in mind but ensure you are still thorough in your analysis."
+            "in mind but ensure you are still thorough in your analysis. "
+            "When the user doesn't specify to sample and we sample data, just "
+            "let them know when responding."
             "\n\n"
             "## PQL (Predictive Query Language) Reference\n"
             "Use this syntax when working with KumoRFM predictions:\n"
             "\n"
-            "**Basic Structure:**\n"
-            "PREDICT [target] FOR EACH [entity]\n"
-            "\n"
-            "**Task Types:**\n"
-            "- Regression: SUM(TRANSACTIONS.PRICE, 0, 30)\n"
-            "- Binary Classification: COUNT(TRANSACTIONS.*, 0, 30) = 0\n"
-            "- Link Prediction: LIST_DISTINCT(TRANSACTIONS.ARTICLE_ID, 0, 30) RANK TOP 10\n"
-            "\n"
-            "**Time Windows:**\n"
-            "- Format: (start, end, unit)\n"
-            "- Units: days, months, hours\n"
-            "- Example: (0, 30, days) = next 30 days\n"
-            "\n"
-            "**Commands:**\n"
-            "- PREDICT: defines target value\n"
-            "- FOR EACH: specifies entity (primary key)\n"
-            "- WHERE: adds filters\n"
-            "- ASSUMING: hypothetical scenarios\n"
-            "- RANK TOP K: limits results to top K\n"
-            "\n"
-            "**Example Queries:**\n"
-            "- Customer purchase prediction: PREDICT SUM(TRANSACTIONS.PRICE, 0, 30) FOR EACH CUSTOMERS.CUSTOMER_ID\n"
-            "- Churn prediction: PREDICT COUNT(TRANSACTIONS.*, 0, 30) = 0 FOR EACH CUSTOMERS.CUSTOMER_ID\n"
-            "- Product recommendations: PREDICT LIST_DISTINCT(TRANSACTIONS.ARTICLE_ID, 0, 30) RANK TOP 10 FOR EACH CUSTOMERS.CUSTOMER_ID"
+            f"{pql_reference}"
         )
     }
     
@@ -157,25 +135,19 @@ def get_graph() -> Graph:
         })
         .add_node(start)
         .add_node(llm)
-        .add_node(predict_customer_purchase)
-        .add_node(predict_product_demand)
-        .add_node(predict_any)
+        .add_node(kumorfm)
         .add_node(query_dataframes)
         .add_node(end)
         .add_router(
             sources=[start],
             router=llm,
             destinations=[
-                predict_customer_purchase,
-                predict_product_demand,
-                predict_any,
+                kumorfm,
                 query_dataframes,
                 end
             ]
         )
-        .add_edge(predict_customer_purchase, llm)
-        .add_edge(predict_product_demand, llm)
-        .add_edge(predict_any, llm)
+        .add_edge(kumorfm, llm)
         .add_edge(query_dataframes, llm)
         .add_edge(llm, end)
         .compile()
