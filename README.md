@@ -47,7 +47,7 @@ An intelligent ecommerce analytics agent powered by KumoRFM and GraphAI, using t
    ```
 
 That's it! The system includes:
-- ✅ Pre-curated H&M sample dataset (1,100 customers, 49K+ articles, 154K+ transactions)
+- ✅ Auto-download H&M sample dataset from HuggingFace (1,100 customers, 5K articles, 15K+ transactions)
 - ✅ Fast startup (~30-60 seconds)
 - ✅ All ecommerce analytics capabilities
 - ✅ Representative data for demos and development
@@ -77,9 +77,9 @@ curl -X POST http://localhost:8000/chat \
 
 ## Architecture
 
-- **Sample Dataset**: Pre-curated H&M data included in repository
+- **Sample Dataset**: H&M data auto-downloaded from HuggingFace (`jamescalam/hm-sample`)
 - **API Service**: KumoRFM-powered GraphAI agent
-- **Frontend**: React-based chat interface  
+- **Frontend**: React-based chat interface
 - **Monitoring**: Jaeger tracing + Prometheus metrics
 
 ## Development
@@ -97,18 +97,16 @@ python example_usage.py
 
 ## Sample Dataset
 
-The repository includes a carefully curated sample of the H&M Personalized Fashion Recommendations dataset:
+The system automatically downloads a curated sample of the H&M Personalized Fashion Recommendations dataset from HuggingFace:
 
-- **1,100 customers** (1,000 active + 100 inactive for churn prediction)
-- **49,854 articles** (products with full metadata)
-- **154,440 transactions** (complete purchase history)
+- **1,100 customers** with demographic and membership data
+- **5,000 articles** (products with full metadata)
+- **15,773 transactions** (complete purchase history)
 
-This sample preserves all data relationships while being fast enough for development and demos. The selection includes:
-- High-value customers (top spenders)
-- Frequent shoppers (most active)
-- Recently active customers
-- Long-term customers (brand loyalty)
-- Diverse product catalog
+This sample preserves all data relationships while being fast enough for development and demos. The dataset is sourced from [`jamescalam/hm-sample`](https://huggingface.co/datasets/jamescalam/hm-sample) on HuggingFace and includes:
+- Diverse customer segments for analytics
+- Rich product catalog with detailed attributes
+- Comprehensive transaction history for predictions
 
 ## Troubleshooting
 
